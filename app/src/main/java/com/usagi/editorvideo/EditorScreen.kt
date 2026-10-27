@@ -217,6 +217,21 @@ fun EditorScreen(vm: VideoViewModel) {
         ActivityResultContracts.RequestPermission()
     ) { vm.startExport() }
 
+    var showExportOptions by remember { mutableStateOf(false) }
+    if (showExportOptions) {
+        ExportOptionsDialog(
+            project = project,
+            vm = vm,
+            onConfirm = {
+                showExportOptions = false
+                val needsAsk = Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                if (needsAsk) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else vm.startExport()
+            },
+            onDismiss = { showExportOptions = false }
+        )
+    }
+
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
             .statusBarsPadding().navigationBarsPadding()
@@ -228,11 +243,10 @@ fun EditorScreen(vm: VideoViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             TextButton(onClick = { confirmClose = true }) { Text("Fechar") }
-            Button(onClick = {
-                val needsAsk = Build.VERSION.SDK_INT >= 33 &&
-                    ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                if (needsAsk) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else vm.startExport()
-            }, enabled = exportState !is ExportState.Running && !loading) {
+            Button(
+                onClick = { showExportOptions = true },
+                enabled = exportState !is ExportState.Running && !loading
+            ) {
                 Text("Exportar")
             }
         }
@@ -250,10 +264,14 @@ fun EditorScreen(vm: VideoViewModel) {
                             v.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                             v.player = player
                         }
+                    },
+                    update = { v ->
+                        v.resizeMode = if (project.fillFrame) AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        else AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
                 )
                 project.texts.filter { timelineMs in it.startMs until it.endMs }.forEach { t ->
-                    val sizePx = t.size.px / project.outputHeight.toFloat() * heightPx
+                    val sizePx = t.size.px * project.textScale / project.outputHeight.toFloat() * heightPx
                     Text(
                         t.text,
                         color = Color(t.colorArgb),
@@ -378,6 +396,41 @@ fun ExportDialog(vm: VideoViewModel) {
             confirmButton = { TextButton(onClick = { vm.dismissExport() }) { Text("OK") } }
         )
     }
+}
+
+// ---------- opções de exportação ----------
+
+@Composable
+private fun ExportOptionsDialog(project: Project, vm: VideoViewModel, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Exportar vídeo") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Proporção", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AspectMode.entries.forEach { a ->
+                        FilterChip(selected = project.aspect == a, onClick = { vm.setAspect(a) }, label = { Text(a.label, fontSize = 12.sp) })
+                    }
+                }
+                Text("Qualidade", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Quality.entries.forEach { q ->
+                        FilterChip(selected = project.quality == q, onClick = { vm.setQuality(q) }, label = { Text(q.label, fontSize = 12.sp) })
+                    }
+                }
+                Text("Ajuste do vídeo no quadro", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = !project.fillFrame, onClick = { vm.setFillFrame(false) }, label = { Text("Caber (com bordas)", fontSize = 12.sp) })
+                    FilterChip(selected = project.fillFrame, onClick = { vm.setFillFrame(true) }, label = { Text("Preencher (corta)", fontSize = 12.sp) })
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Saída: ${project.outputWidth}x${project.outputHeight} · MP4", fontSize = 12.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Exportar") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
 }
 
 // ---------- aba Clipes ----------

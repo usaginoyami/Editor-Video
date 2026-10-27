@@ -13,7 +13,7 @@ Editor de vídeo para Android, **inspirado no Adobe Premiere**. Sem login, sem m
 - **Cor:** brilho, contraste, saturação, temperatura e filtros prontos (Vívido, Quente, Frio, P&B, Cinema)
 - **Áudio:** música de fundo com controle de volume
 - **Projeto:** salvo automaticamente e reaberto quando você volta ao app
-- **Exportar:** MP4 (H.264 + AAC) em 720p, salvo em `Filmes/EditorVideo`, com progresso em notificação e exportação em segundo plano
+- **Exportar:** MP4 (H.264 + AAC) em 720p ou 1080p, proporção Auto, 16:9, 9:16 ou 1:1 (com bordas ou preenchendo o quadro), salvo em `Filmes/EditorVideo`, com progresso em notificação e exportação em segundo plano
 
 Tudo funciona offline e os vídeos nunca saem do seu aparelho.
 
@@ -21,7 +21,6 @@ Tudo funciona offline e os vídeos nunca saem do seu aparelho.
 
 - Sem transições entre clipes, camadas de vídeo, keyframes ou legendas automáticas
 - Pré-visualização aproximada: o resultado final vem da exportação
-- Saída em 1280x720 (paisagem) ou 720x1280 (retrato), conforme o primeiro clipe
 
 ## Como gerar o APK
 

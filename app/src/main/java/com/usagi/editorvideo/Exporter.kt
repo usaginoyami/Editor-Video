@@ -22,6 +22,7 @@ import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.TextOverlay
 import androidx.media3.transformer.Composition
+import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
@@ -29,6 +30,7 @@ import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
+import androidx.media3.transformer.VideoEncoderSettings
 import java.io.File
 import kotlin.math.min
 
@@ -48,13 +50,13 @@ fun colorEffects(c: ColorSettings): List<Effect> {
 }
 
 /** Texto que só aparece entre startMs e endMs (tempo da linha do tempo). */
-private class TimedTextOverlay(private val item: TextItem) : TextOverlay() {
+private class TimedTextOverlay(private val item: TextItem, private val scale: Float) : TextOverlay() {
     private fun visible(timeUs: Long): Boolean = timeUs / 1000 in item.startMs until item.endMs
 
     override fun getText(presentationTimeUs: Long): SpannableString {
         val s = SpannableString(if (visible(presentationTimeUs)) item.text else " ")
         s.setSpan(ForegroundColorSpan(item.colorArgb), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-        s.setSpan(AbsoluteSizeSpan(item.size.px), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+        s.setSpan(AbsoluteSizeSpan((item.size.px * scale).toInt()), 0, s.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
         return s
     }
 
@@ -110,11 +112,12 @@ class Exporter(private val context: Context) {
 
         val videoEffects = mutableListOf<Effect>()
         videoEffects += Presentation.createForWidthAndHeight(
-            project.outputWidth, project.outputHeight, Presentation.LAYOUT_SCALE_TO_FIT
+            project.outputWidth, project.outputHeight,
+            if (project.fillFrame) Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP else Presentation.LAYOUT_SCALE_TO_FIT
         )
         videoEffects += colorEffects(project.color)
         if (project.texts.isNotEmpty()) {
-            videoEffects += OverlayEffect(project.texts.map { TimedTextOverlay(it) })
+            videoEffects += OverlayEffect(project.texts.map { TimedTextOverlay(it, project.textScale) })
         }
 
         val composition = Composition.Builder(sequences)
@@ -122,7 +125,15 @@ class Exporter(private val context: Context) {
             .experimentalSetForceAudioTrack(true)
             .build()
 
+        // bitrate fixo por qualidade: o padrão do Media3 é baixo para gameplay com muito movimento
+        val encoderFactory = DefaultEncoderFactory.Builder(context)
+            .setRequestedVideoEncoderSettings(
+                VideoEncoderSettings.Builder().setBitrate(project.quality.videoBitrate).build()
+            )
+            .build()
+
         val t = Transformer.Builder(context)
+            .setEncoderFactory(encoderFactory)
             .setVideoMimeType(MimeTypes.VIDEO_H264)
             .setAudioMimeType(MimeTypes.AUDIO_AAC)
             .addListener(object : Transformer.Listener {

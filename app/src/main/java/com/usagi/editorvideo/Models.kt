@@ -62,17 +62,53 @@ val COLOR_PRESETS = listOf(
     "Cinema" to ColorSettings(contrast = 0.25f, saturation = -0.15f, temperature = 0.15f, brightness = -0.05f)
 )
 
+/** Proporção da saída. AUTO segue o primeiro clipe. */
+enum class AspectMode(val label: String) {
+    AUTO("Auto"), LANDSCAPE("16:9"), PORTRAIT("9:16"), SQUARE("1:1")
+}
+
+/** Qualidade da saída: [shortSide] é o lado menor do quadro em pixels. */
+enum class Quality(val label: String, val shortSide: Int, val videoBitrate: Int) {
+    P720("720p", 720, 6_000_000),
+    P1080("1080p", 1080, 10_000_000)
+}
+
 data class Project(
     val clips: List<Clip> = emptyList(),
     val texts: List<TextItem> = emptyList(),
     val music: Music? = null,
-    val color: ColorSettings = ColorSettings()
+    val color: ColorSettings = ColorSettings(),
+    val aspect: AspectMode = AspectMode.AUTO,
+    val quality: Quality = Quality.P720,
+    /** false: o vídeo cabe inteiro (com bordas pretas); true: preenche o quadro cortando o excesso. */
+    val fillFrame: Boolean = false
 ) {
     val totalMs: Long get() = clips.sumOf { it.lengthMs }
 
-    /** Saída 1280x720 (paisagem) ou 720x1280 (retrato), conforme o primeiro clipe. */
-    val outputWidth: Int get() = clips.firstOrNull()?.let { if (it.width >= it.height) 1280 else 720 } ?: 1280
-    val outputHeight: Int get() = clips.firstOrNull()?.let { if (it.width >= it.height) 720 else 1280 } ?: 720
+    private val isPortrait: Boolean
+        get() = when (aspect) {
+            AspectMode.LANDSCAPE, AspectMode.SQUARE -> false
+            AspectMode.PORTRAIT -> true
+            AspectMode.AUTO -> clips.firstOrNull()?.let { it.width < it.height } ?: false
+        }
+
+    private val longSide: Int get() = quality.shortSide * 16 / 9
+
+    val outputWidth: Int
+        get() = when {
+            aspect == AspectMode.SQUARE -> quality.shortSide
+            isPortrait -> quality.shortSide
+            else -> longSide
+        }
+    val outputHeight: Int
+        get() = when {
+            aspect == AspectMode.SQUARE -> quality.shortSide
+            isPortrait -> longSide
+            else -> quality.shortSide
+        }
+
+    /** Os tamanhos de texto foram pensados para 720p; em 1080p crescem na mesma proporção. */
+    val textScale: Float get() = quality.shortSide / 720f
 }
 
 sealed interface ExportState {

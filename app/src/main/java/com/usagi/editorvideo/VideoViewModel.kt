@@ -189,6 +189,12 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
         _project.value = _project.value.let { it.copy(texts = it.texts.filter { t -> t.id != id }) }
     }
 
+    // ---------- formato de saída ----------
+
+    fun setAspect(a: AspectMode) { _project.value = _project.value.copy(aspect = a) }
+    fun setQuality(q: Quality) { _project.value = _project.value.copy(quality = q) }
+    fun setFillFrame(fill: Boolean) { _project.value = _project.value.copy(fillFrame = fill) }
+
     // ---------- cor ----------
 
     fun setColor(c: ColorSettings) { _project.value = _project.value.copy(color = c) }

@@ -17,6 +17,9 @@ object ProjectStore {
         val json = JSONObject().apply {
             put("version", 1)
             put("nextId", nextId)
+            put("aspect", p.aspect.name)
+            put("quality", p.quality.name)
+            put("fillFrame", p.fillFrame)
             put("clips", JSONArray().also { a ->
                 p.clips.forEach { c ->
                     a.put(JSONObject().apply {
@@ -120,7 +123,12 @@ object ProjectStore {
                     temperature = c.optDouble("temperature", 0.0).toFloat()
                 )
             } ?: ColorSettings()
-            Saved(Project(clips, texts, music, color), o.optLong("nextId", 1L))
+            val aspect = runCatching { AspectMode.valueOf(o.getString("aspect")) }.getOrDefault(AspectMode.AUTO)
+            val quality = runCatching { Quality.valueOf(o.getString("quality")) }.getOrDefault(Quality.P720)
+            Saved(
+                Project(clips, texts, music, color, aspect, quality, o.optBoolean("fillFrame", false)),
+                o.optLong("nextId", 1L)
+            )
         } catch (e: Exception) {
             null
         }
