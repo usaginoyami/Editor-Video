@@ -1,16 +1,20 @@
 package com.usagi.editorvideo
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(FlowPreview::class)
 class VideoViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _project = MutableStateFlow(Project())
@@ -29,6 +33,68 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
 
     private var nextId = 1L
 
+    init {
+        viewModelScope.launch {
+            _loading.value = true
+            restore()
+            _loading.value = false
+            // salva sozinho: espera 0,5 s sem mudanças para não gravar a cada movimento de slider
+            _project.debounce(500).collect { p ->
+                val ctx = getApplication<Application>()
+                val next = nextId
+                withContext(Dispatchers.IO) {
+                    try {
+                        if (p.clips.isEmpty()) ProjectStore.clear(ctx) else ProjectStore.save(ctx, p, next)
+                    } catch (_: Exception) { }
+                }
+            }
+        }
+    }
+
+    /** Reabre o projeto salvo. Vídeos que sumiram ou perderam a permissão são removidos. */
+    private suspend fun restore() {
+        val ctx = getApplication<Application>()
+        val saved = withContext(Dispatchers.IO) { ProjectStore.load(ctx) } ?: return
+        val sp = saved.project
+        val (clips, music) = withContext(Dispatchers.IO) {
+            val ok = sp.clips.mapNotNull { c ->
+                MediaUtils.readVideo(ctx, c.uri)?.let { info ->
+                    val end = minOf(c.trimEndMs, info.durationMs)
+                    c.copy(
+                        durationMs = info.durationMs,
+                        trimStartMs = c.trimStartMs.coerceIn(0L, maxOf(0L, end - 1)),
+                        trimEndMs = end,
+                        thumb = info.thumb
+                    )
+                }
+            }
+            ok to sp.music?.takeIf { MediaUtils.readAudio(ctx, it.uri) != null }
+        }
+        val maxId = (sp.clips.map { it.id } + sp.texts.map { it.id }).maxOrNull() ?: 0L
+        nextId = maxOf(saved.nextId, maxId + 1)
+
+        if (clips.isEmpty()) {
+            _message.value = "Não consegui reabrir o projeto salvo: os vídeos foram movidos ou apagados."
+            return
+        }
+        _project.value = sp.copy(clips = clips, music = music)
+        updateClips { it } // reajusta os textos ao tamanho atual e seleciona o primeiro clipe
+        val lost = sp.clips.size - clips.size
+        if (lost > 0) {
+            _message.value = "$lost vídeo(s) não foram encontrados e saíram do projeto."
+        } else if (sp.music != null && music == null) {
+            _message.value = "A música do projeto não foi encontrada."
+        }
+    }
+
+    /** Mantém o acesso ao arquivo escolhido para poder reabrir o projeto depois. */
+    private fun keepAccess(uri: Uri) {
+        try {
+            getApplication<Application>().contentResolver
+                .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Exception) { }
+    }
+
     fun clearMessage() { _message.value = null }
     fun select(id: Long?) { _selectedId.value = id }
 
@@ -41,6 +107,7 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
             val ctx = getApplication<Application>()
             val added = withContext(Dispatchers.IO) {
                 uris.mapNotNull { uri ->
+                    keepAccess(uri)
                     MediaUtils.readVideo(ctx, uri)?.let { info ->
                         Clip(nextId++, uri, info.durationMs, info.width, info.height, thumb = info.thumb)
                     }
@@ -131,6 +198,7 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
     fun setMusic(uri: Uri) {
         viewModelScope.launch {
             val ctx = getApplication<Application>()
+            keepAccess(uri)
             val m = withContext(Dispatchers.IO) { MediaUtils.readAudio(ctx, uri) }
             if (m == null) _message.value = "Não consegui abrir esse áudio."
             else _project.value = _project.value.copy(music = m)

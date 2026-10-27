@@ -1,7 +1,6 @@
 package com.usagi.editorvideo
 
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,8 +23,9 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun HomeScreen(vm: VideoViewModel) {
     val loading by vm.loading.collectAsState()
+    // OpenMultipleDocuments (e não o seletor de fotos) permite guardar o acesso e reabrir o projeto depois
     val picker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(20)
+        ActivityResultContracts.OpenMultipleDocuments()
     ) { uris -> vm.addClips(uris) }
 
     Column(
@@ -41,7 +41,7 @@ fun HomeScreen(vm: VideoViewModel) {
         )
         Spacer(Modifier.height(32.dp))
         if (loading) CircularProgressIndicator() else Button(onClick = {
-            picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+            picker.launch(arrayOf("video/*"))
         }) { Text("Novo projeto") }
     }
 }

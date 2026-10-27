@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -199,8 +198,19 @@ fun EditorScreen(vm: VideoViewModel) {
     }
 
     val addClipsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(20)
+        ActivityResultContracts.OpenMultipleDocuments()
     ) { uris -> vm.addClips(uris) }
+
+    var confirmClose by remember { mutableStateOf(false) }
+    if (confirmClose) {
+        AlertDialog(
+            onDismissRequest = { confirmClose = false },
+            title = { Text("Fechar projeto?") },
+            text = { Text("O projeto salvo será apagado. Vídeos já exportados não são afetados.") },
+            confirmButton = { TextButton(onClick = { confirmClose = false; vm.closeProject() }) { Text("Apagar e fechar") } },
+            dismissButton = { TextButton(onClick = { confirmClose = false }) { Text("Cancelar") } }
+        )
+    }
 
     // a notificação de progresso é opcional: exporta mesmo se a permissão for negada
     val notificationPermission = rememberLauncherForActivityResult(
@@ -217,7 +227,7 @@ fun EditorScreen(vm: VideoViewModel) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            TextButton(onClick = { vm.closeProject() }) { Text("Fechar") }
+            TextButton(onClick = { confirmClose = true }) { Text("Fechar") }
             Button(onClick = {
                 val needsAsk = Build.VERSION.SDK_INT >= 33 &&
                     ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -314,7 +324,7 @@ fun EditorScreen(vm: VideoViewModel) {
                     Modifier.size(width = 64.dp, height = 64.dp).clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable {
-                            addClipsLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                            addClipsLauncher.launch(arrayOf("video/*"))
                         },
                     contentAlignment = Alignment.Center
                 ) { Text("+", fontSize = 28.sp) }
