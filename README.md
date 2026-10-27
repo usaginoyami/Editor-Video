@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.png" width="160" alt="Editor Video"></p>
+
 # Editor Video
 
 Editor de vídeo para Android, **inspirado no Adobe Premiere**. Sem login, sem marca d'água e sem assinatura.
