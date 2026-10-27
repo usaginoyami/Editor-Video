@@ -1,19 +1,15 @@
 package com.usagi.editorvideo
 
 import android.app.Application
-import android.content.ContentValues
 import android.net.Uri
-import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 class VideoViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -23,8 +19,7 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
     private val _selectedId = MutableStateFlow<Long?>(null)
     val selectedId: StateFlow<Long?> = _selectedId.asStateFlow()
 
-    private val _export = MutableStateFlow<ExportState>(ExportState.Idle)
-    val export: StateFlow<ExportState> = _export.asStateFlow()
+    val export: StateFlow<ExportState> = ExportManager.state
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
@@ -33,7 +28,6 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     private var nextId = 1L
-    private var exporter: Exporter? = null
 
     fun clearMessage() { _message.value = null }
     fun select(id: Long?) { _selectedId.value = id }
@@ -152,80 +146,18 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- projeto ----------
 
     fun closeProject() {
-        exporter?.cancel()
-        exporter = null
-        _export.value = ExportState.Idle
+        ExportManager.cancel()
         _project.value = Project()
         _selectedId.value = null
     }
 
-    // ---------- exportar ----------
+    // ---------- exportar (feito pelo ExportManager, que sobrevive à tela) ----------
 
-    fun startExport() {
-        val p = _project.value
-        if (p.clips.isEmpty() || _export.value is ExportState.Running) return
-        val ctx = getApplication<Application>()
-        val tmp = File(ctx.cacheDir, "export_${System.currentTimeMillis()}.mp4")
-        val ex = Exporter(ctx)
-        exporter = ex
-        _export.value = ExportState.Running(0)
-        try {
-            ex.start(
-                p, tmp,
-                onDone = { saveToGallery(tmp) },
-                onFail = { msg ->
-                    tmp.delete()
-                    _export.value = ExportState.Failed("Falha ao exportar: $msg")
-                }
-            )
-        } catch (e: Exception) {
-            _export.value = ExportState.Failed("Falha ao exportar: ${e.message}")
-            return
-        }
-        viewModelScope.launch {
-            while (_export.value is ExportState.Running) {
-                val pr = ex.progress()
-                if (pr >= 0) _export.value = ExportState.Running(pr)
-                delay(300)
-            }
-        }
-    }
+    fun startExport() = ExportManager.start(getApplication(), _project.value)
 
-    fun cancelExport() {
-        exporter?.cancel()
-        exporter = null
-        _export.value = ExportState.Idle
-    }
+    fun cancelExport() = ExportManager.cancel()
 
-    fun dismissExport() { _export.value = ExportState.Idle }
-
-    private fun saveToGallery(tmp: File) {
-        viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                try {
-                    val resolver = getApplication<Application>().contentResolver
-                    val values = ContentValues().apply {
-                        put(MediaStore.Video.Media.DISPLAY_NAME, "EditorVideo_${System.currentTimeMillis()}.mp4")
-                        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                        put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/EditorVideo")
-                        put(MediaStore.Video.Media.IS_PENDING, 1)
-                    }
-                    val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)!!
-                    resolver.openOutputStream(uri)!!.use { out -> tmp.inputStream().use { it.copyTo(out) } }
-                    values.clear()
-                    values.put(MediaStore.Video.Media.IS_PENDING, 0)
-                    resolver.update(uri, values, null, null)
-                    true
-                } catch (e: Throwable) {
-                    false
-                } finally {
-                    tmp.delete()
-                }
-            }
-            _export.value = if (ok) ExportState.Done("Vídeo salvo em Filmes/EditorVideo")
-            else ExportState.Failed("Não consegui salvar o vídeo.")
-        }
-    }
+    fun dismissExport() = ExportManager.dismiss()
 
     companion object {
         const val MIN_PART_MS = 300L

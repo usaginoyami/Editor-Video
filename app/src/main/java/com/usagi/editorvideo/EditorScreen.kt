@@ -2,6 +2,9 @@
 
 package com.usagi.editorvideo
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -70,6 +73,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -198,6 +202,11 @@ fun EditorScreen(vm: VideoViewModel) {
         ActivityResultContracts.PickMultipleVisualMedia(20)
     ) { uris -> vm.addClips(uris) }
 
+    // a notificação de progresso é opcional: exporta mesmo se a permissão for negada
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { vm.startExport() }
+
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
             .statusBarsPadding().navigationBarsPadding()
@@ -209,7 +218,11 @@ fun EditorScreen(vm: VideoViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             TextButton(onClick = { vm.closeProject() }) { Text("Fechar") }
-            Button(onClick = { vm.startExport() }, enabled = exportState !is ExportState.Running && !loading) {
+            Button(onClick = {
+                val needsAsk = Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                if (needsAsk) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else vm.startExport()
+            }, enabled = exportState !is ExportState.Running && !loading) {
                 Text("Exportar")
             }
         }
@@ -322,7 +335,12 @@ fun EditorScreen(vm: VideoViewModel) {
         }
     }
 
-    // diálogo de exportação
+}
+
+/** Diálogo de exportação. Fica fora do editor para aparecer em qualquer tela. */
+@Composable
+fun ExportDialog(vm: VideoViewModel) {
+    val exportState by vm.export.collectAsState()
     when (val s = exportState) {
         is ExportState.Idle -> Unit
         is ExportState.Running -> AlertDialog(

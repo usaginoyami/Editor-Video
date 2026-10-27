@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
                     message?.let { Toast.makeText(ctx, it, Toast.LENGTH_SHORT).show(); vm.clearMessage() }
                 }
                 if (project.clips.isEmpty()) HomeScreen(vm) else EditorScreen(vm)
+                ExportDialog(vm)
             }
         }
     }
